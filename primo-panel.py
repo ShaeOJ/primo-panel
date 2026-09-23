@@ -490,7 +490,9 @@ async function refreshSwarm(){
       +tile('Total Accepted',t.accepted||0,1)+tile('Total Rejected',t.rejected||0);
     var rows='<tr><th>Worker</th><th>IP</th><th>Hashrate</th><th>Best Diff</th><th>Acc</th><th>Rej</th><th>Temp</th><th>Uptime</th></tr>';
     (s.miners||[]).forEach(function(m){
-      rows+='<tr class="'+(m.self?'me':'')+'"><td>'+(m.worker||'?')+(m.self?' (this)':'')+'</td><td>'+m.ip
+      var link='http://'+m.ip+':'+(location.port||'8088')+'/';
+      var ipcell=m.self?m.ip:'<a href="'+link+'" target="_blank" rel="noopener" style="color:var(--acc);text-decoration:none">'+m.ip+' ↗</a>';
+      rows+='<tr class="'+(m.self?'me':'')+'"><td>'+(m.worker||'?')+(m.self?' (this)':'')+'</td><td>'+ipcell
         +'</td><td>'+fmtHash(m.mhs)+'</td><td>'+fmtDiff(m.best)+'</td><td>'+m.accepted+'</td><td>'+m.rejected
         +'</td><td>'+(+m.max_temp).toFixed(0)+'&deg;C</td><td>'+fmtUptime(m.uptime)+'</td></tr>';
     });
