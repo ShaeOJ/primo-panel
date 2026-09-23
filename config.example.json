@@ -1,0 +1,10 @@
+{
+  "algo": "sha256d",
+  "url": "stratum+tcp://asicpool.space:5334",
+  "user": "YOUR_BCH_ADDRESS.worker1",
+  "pass": "x",
+  "threads": 4,
+  "api-bind": "0.0.0.0:4068",
+  "retry-pause": 10,
+  "cpu-priority": 1
+}

@@ -1,0 +1,18 @@
+[Unit]
+Description=Primo ARM Miner
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__MINER_USER__
+# Config-driven: all pool/algo/threads/api-bind settings live in the JSON,
+# so Primo Panel can edit them and just restart this unit. api-bind:0.0.0.0
+# in the config exposes the read-only stats API on the LAN (no -b flag needed).
+ExecStart=/usr/local/bin/primo-arm-miner --config /etc/primo/config.json
+Restart=always
+RestartSec=10
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

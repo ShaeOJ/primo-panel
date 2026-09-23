@@ -1,0 +1,24 @@
+[Unit]
+Description=Primo Panel (web control/monitor for primo-arm-miner)
+After=network-online.target primo-miner.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Runs as root so it can write /etc/primo/config.json and `systemctl restart`
+# the miner. It is basic-auth protected; CHANGE PANEL_PASS below before enabling.
+User=root
+Environment=PANEL_HOST=0.0.0.0
+Environment=PANEL_PORT=8088
+Environment=PANEL_USER=admin
+Environment=PANEL_PASS=changeme
+Environment=PRIMO_API_HOST=127.0.0.1
+Environment=PRIMO_API_PORT=4068
+Environment=PRIMO_CONFIG=/etc/primo/config.json
+Environment=PRIMO_SERVICE=primo-miner
+ExecStart=/usr/bin/python3 /opt/primo-panel/primo-panel.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

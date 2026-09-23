@@ -1,0 +1,9 @@
+# The Primo miner binary is third-party (GPL-3.0) — not redistributed here.
+# Drop it in bin/ locally, or let setup.sh use /usr/local/bin/primo-arm-miner
+# or PRIMO_BIN=... See bin/README.md.
+bin/primo-arm-miner
+bin/*.bin
+
+# Python
+__pycache__/
+*.pyc
