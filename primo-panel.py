@@ -247,6 +247,9 @@ def write_config(cfg):
     try:
         with os.fdopen(fd, "w") as f:
             json.dump(cfg, f, indent=2)
+        # mkstemp creates 0600 root-owned; the miner runs as a non-root user and
+        # must be able to READ its config, so make it world-readable before swap.
+        os.chmod(tmp, 0o644)
         os.replace(tmp, CONFIG_PATH)  # atomic
     finally:
         if os.path.exists(tmp):
