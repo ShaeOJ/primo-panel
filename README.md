@@ -69,4 +69,12 @@ Seed env (all optional): `MINER_USER`, `PRIMO_BIN`, `PANEL_PASS`, `ALGO`,
 - `GET /api/config` → current `config.json`
 - `POST /api/config` (JSON body) → validate + write + restart
 - `POST /api/control` `{"action":"start|stop|restart"}`
-- `GET /api/swarm` → `{miners:[...], totals:{count,mhs,accepted,rejected}, scanned_at}` — the whole LAN fleet
+- `GET /api/swarm` → `{miners:[...], totals:{count,mhs,accepted,rejected,est_watts,mhs_per_w}, scanned_at}` — the whole LAN fleet
+- `GET /api/system/info` → **no auth**; the whole swarm in the AxeOS/BitAxe `/api/system/info` shape (hashRate in GH/s, sharesAccepted/Rejected, temp, estimated `power`, `workers[]`) so external monitors (e.g. AxeOS-VPN) can pull the fleet from one endpoint
+
+## Efficiency estimate
+
+CPU miners have no power sensor, so efficiency is **estimated** from the board's
+spec draw under load — `BOARD_WATTS` (default `3.0`, an H618 quad-A53 SBC). The
+panel shows `~W` and `~MH/s per watt` (per device and fleet-wide). Tune
+`BOARD_WATTS` per board in `primo-panel.service`.

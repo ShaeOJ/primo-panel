@@ -16,6 +16,9 @@ Environment=PRIMO_API_HOST=127.0.0.1
 Environment=PRIMO_API_PORT=4068
 Environment=PRIMO_CONFIG=/etc/primo/config.json
 Environment=PRIMO_SERVICE=primo-miner
+# CPU miners have no power sensor; efficiency is estimated from this board's
+# spec draw under load (H618 quad-A53 SBC ~= 3 W). Tune per board.
+Environment=BOARD_WATTS=3.0
 ExecStart=/usr/bin/python3 /opt/primo-panel/primo-panel.py
 Restart=always
 RestartSec=5

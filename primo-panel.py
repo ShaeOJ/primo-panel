@@ -47,6 +47,10 @@ SWARM_SUBNET = os.environ.get("SWARM_SUBNET", "")                       # e.g. "
 SWARM_PEERS = [p.strip() for p in os.environ.get("SWARM_PEERS", "").split(",") if p.strip()]
 SWARM_INTERVAL = int(os.environ.get("SWARM_INTERVAL", "30"))            # seconds between scans
 
+# CPU miners report no wattage, so efficiency is estimated from the board's
+# spec draw under full load. H618 quad-A53 SBC (OPi Zero2W/Zero3) ~= 3 W.
+BOARD_WATTS = float(os.environ.get("BOARD_WATTS", "3.0"))
+
 VALID_ALGOS = {"verus", "sha256d", "scrypt", "randomx", "rx", "xmr", "monero"}
 
 
@@ -182,11 +186,15 @@ def swarm_scan():
                     "version": st.get("version", ""),
                 })
     miners.sort(key=lambda m: (not m["self"], m["ip"]))
+    total_mhs = sum(m["mhs"] for m in miners)
+    est_watts = round(len(miners) * BOARD_WATTS, 1)
     totals = {
         "count": len(miners),
-        "mhs": sum(m["mhs"] for m in miners),
+        "mhs": total_mhs,
         "accepted": sum(m["accepted"] for m in miners),
         "rejected": sum(m["rejected"] for m in miners),
+        "est_watts": est_watts,
+        "mhs_per_w": round(total_mhs / est_watts, 3) if est_watts > 0 else 0,
     }
     with _swarm_lock:
         _swarm["miners"] = miners
@@ -206,6 +214,38 @@ def swarm_loop():
 def swarm_snapshot():
     with _swarm_lock:
         return dict(_swarm)
+
+
+def axeos_info():
+    """The whole swarm rendered in the AxeOS/BitAxe `/api/system/info` shape so
+    external monitors (AxeOS-VPN) can pull the fleet from one endpoint. hashRate
+    is GH/s (BitAxe convention). Read-only; served without auth."""
+    s = swarm_snapshot()
+    t = s.get("totals", {})
+    miners = s.get("miners", [])
+    first_algo = miners[0].get("algo", "sha256d") if miners else "sha256d"
+    return {
+        "hostname": "asic-primo-swarm",
+        "ASICModel": "A.S.I.C. Primo Swarm (%d)" % t.get("count", 0),
+        "version": "primo-panel",
+        "hashRate": round(t.get("mhs", 0) / 1000.0, 6),          # GH/s
+        "sharesAccepted": t.get("accepted", 0),
+        "sharesRejected": t.get("rejected", 0),
+        "temp": max([m.get("max_temp", 0) for m in miners], default=0),
+        "power": t.get("est_watts", 0), "powerEstimated": True,
+        "voltage": 0, "current": 0, "frequency": 0, "coreVoltage": 0,
+        "bestDiff": max([m.get("best", 0) for m in miners], default=0),
+        "uptimeSeconds": max([m.get("uptime", 0) for m in miners], default=0),
+        "minerCount": t.get("count", 0),
+        "algorithm": "scrypt" if "scrypt" in first_algo.lower() else "sha256",
+        "scannedAt": s.get("scanned_at", 0),
+        "workers": [{
+            "ip": m["ip"], "worker": m["worker"], "hashRate": round(m["mhs"] / 1000.0, 6),
+            "sharesAccepted": m["accepted"], "sharesRejected": m["rejected"],
+            "bestDiff": m["best"], "temp": m["max_temp"], "algo": m["algo"],
+            "poolUser": m["user"], "uptimeSeconds": m["uptime"],
+        } for m in miners],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -313,6 +353,10 @@ class Handler(BaseHTTPRequestHandler):
         return self.rfile.read(n) if n else b""
 
     def do_GET(self):
+        # Public, read-only fleet telemetry in the AxeOS/BitAxe shape (no auth,
+        # same sensitivity as the miner's own open 4068 API) — for AxeOS-VPN etc.
+        if self.path == "/api/system/info":
+            return self._json(axeos_info())
         if not self._authed():
             return self._deny()
         if self.path == "/" or self.path.startswith("/?"):
@@ -325,6 +369,9 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/stats":
             stats = collect_stats()
             stats["service"] = service_active()
+            if stats.get("online"):
+                stats["est_watts"] = BOARD_WATTS
+                stats["mhs_per_w"] = round(stats.get("mhs", 0) / BOARD_WATTS, 3) if BOARD_WATTS > 0 else 0
             self._json(stats)
         elif self.path == "/api/config":
             self._json(read_config())
@@ -366,7 +413,8 @@ class Handler(BaseHTTPRequestHandler):
 
 PAGE = r"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Primo Panel</title>
+<title>A.S.I.C. — Primo Miner Monitor</title>
+<meta name="theme-color" content="#0a0d0a">
 <style>
 :root{--bg:#0a0d0a;--card:#121712;--acc:#ffd200;--grn:#7bb661;--txt:#d7e4c9;--dim:#7d8a6f;--red:#e06060}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 ui-monospace,Menlo,Consolas,monospace}
@@ -381,7 +429,8 @@ h1{color:var(--acc);font-size:18px;letter-spacing:.05em;margin:0 0 2px}
 .pill{display:inline-block;padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700}
 .pill.on{background:rgba(123,182,97,.18);color:var(--grn);border:1px solid rgba(123,182,97,.4)}
 .pill.off{background:rgba(224,96,96,.18);color:var(--red);border:1px solid rgba(224,96,96,.4)}
-h2{color:var(--grn);font-size:14px;border-bottom:1px solid #26301f;padding-bottom:6px;margin:22px 0 12px}
+h2{color:var(--grn);font-size:14px;border-bottom:1px solid #26301f;padding-bottom:6px;margin:22px 0 12px;letter-spacing:.04em}
+h2 .ico,.hero-label .ico{color:var(--acc);margin-right:7px;font-style:normal}
 label{display:block;color:var(--dim);font-size:12px;margin:10px 0 3px}
 input,select,textarea{width:100%;background:#0e130d;border:1px solid #2c3823;color:var(--txt);border-radius:8px;padding:8px;font:inherit}
 textarea{min-height:120px;resize:vertical}
@@ -398,17 +447,51 @@ table.swarm{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
 table.swarm th{text-align:left;color:var(--dim);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;padding:6px 8px;border-bottom:1px solid #26301f}
 table.swarm td{padding:6px 8px;border-bottom:1px solid #1a2115;white-space:nowrap}
 table.swarm tr.me td{color:var(--acc)}
-</style></head><body><div class="wrap">
-<h1>PRIMO PANEL</h1>
-<div class="sub">live control + monitor · <span id="svc" class="pill off">…</span> <span id="host"></span></div>
+table.swarm tr.me{background:rgba(255,210,0,.05)}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 18px;border-bottom:1px solid #26301f;background:linear-gradient(180deg,#0e130d,#0a0d0a)}
+.brand{display:flex;align-items:center;gap:12px}
+.atom{width:40px;height:40px;flex-shrink:0;animation:spin 20s linear infinite}
+.atom .orb ellipse{fill:none;stroke:var(--grn);stroke-width:1.1;opacity:.55}
+.atom .o2{transform:rotate(60deg);transform-origin:20px 20px}
+.atom .o3{transform:rotate(120deg);transform-origin:20px 20px}
+.atom .nuc{fill:var(--acc);filter:drop-shadow(0 0 5px var(--acc))}
+@keyframes spin{to{transform:rotate(360deg)}}
+.wordmark{font-weight:800;font-size:20px;letter-spacing:.16em;color:var(--acc);line-height:1}
+.wordmark small{display:block;font-size:9.5px;letter-spacing:.24em;color:var(--grn);font-weight:600;margin-top:4px}
+.host{color:var(--dim);font-size:12px;margin-left:8px}
+.hero{display:flex;flex-wrap:wrap;align-items:center;gap:18px;margin:18px 0 10px;padding:16px 18px;background:var(--card);border:1px solid #2a3620;border-radius:12px;box-shadow:0 0 24px rgba(255,210,0,.05) inset}
+.hero-main{min-width:190px}
+.hero-label{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+.hero-val{color:var(--acc);font-size:38px;font-weight:800;line-height:1.1;margin-top:4px;text-shadow:0 0 18px rgba(255,210,0,.28)}
+.hero .grid{flex:1;margin:0;min-width:240px}
+</style></head><body>
+<header class="topbar">
+  <div class="brand">
+    <svg class="atom" viewBox="0 0 40 40" aria-hidden="true">
+      <g class="orb o1"><ellipse cx="20" cy="20" rx="15.5" ry="6"/></g>
+      <g class="orb o2"><ellipse cx="20" cy="20" rx="15.5" ry="6"/></g>
+      <g class="orb o3"><ellipse cx="20" cy="20" rx="15.5" ry="6"/></g>
+      <circle class="nuc" cx="20" cy="20" r="3.4"/>
+    </svg>
+    <div class="wordmark">A.S.I.C.<small>PRIMO MINER MONITOR</small></div>
+  </div>
+  <div><span id="svc" class="pill off">…</span> <span class="host" id="host"></span></div>
+</header>
+<div class="wrap">
 
-<div class="grid" id="stats"></div>
-
-<h2>Swarm <small class="hint" id="swarm-count"></small></h2>
-<div class="grid" id="swarm-totals"></div>
+<section class="hero">
+  <div class="hero-main">
+    <div class="hero-label"><span class="ico">⛏</span>Fleet Hashrate <span class="hint" id="swarm-count"></span></div>
+    <div class="hero-val" id="hero-hash">—</div>
+  </div>
+  <div class="grid" id="swarm-totals"></div>
+</section>
 <div style="overflow-x:auto"><table class="swarm" id="swarm-table"></table></div>
 
-<h2>Settings</h2>
+<h2><span class="ico">◈</span>This Device</h2>
+<div class="grid" id="stats"></div>
+
+<h2><span class="ico">⚙</span>Settings</h2>
 <small class="hint">Edits are written to config.json and the miner is restarted. Advanced keys (pools[], cpu-affinity, etc.) can be edited in Raw JSON below.</small>
 <div class="row">
   <div><label>Algorithm</label>
@@ -426,7 +509,7 @@ table.swarm tr.me td{color:var(--acc)}
 <div id="rawwrap" style="display:none"><label>Raw config.json</label><textarea id="raw"></textarea>
   <div class="btns"><button onclick="saveRaw()">Save Raw &amp; Restart</button></div></div>
 
-<h2>Service</h2>
+<h2><span class="ico">⟁</span>Service</h2>
 <div class="btns">
   <button class="ghost" onclick="ctl('restart')">Restart</button>
   <button class="ghost" onclick="ctl('start')">Start</button>
@@ -449,6 +532,8 @@ async function refresh(){
       +tile('Accepted',s.accepted,1)+tile('Rejected',s.rejected)+tile('Stale',s.stale)
       +tile('Best Share',(+s.best).toFixed(2))+tile('Pool Diff',(+s.diff).toFixed(4))
       +tile('Max Temp',(+s.max_temp).toFixed(0)+' &deg;C')+tile('Threads',s.threads)
+      +tile('Est. Power','~'+(+s.est_watts||0).toFixed(1)+' W')
+      +tile('Efficiency','~'+(+s.mhs_per_w||0).toFixed(2)+' MH/s/W',1)
       +tile('Uptime',fmtUptime(s.uptime))+tile('Algo',s.algo);
   }catch(e){el('svc').textContent='panel error';}
 }
@@ -485,8 +570,11 @@ function fmtHash(mhs){return mhs>=1000?(mhs/1000).toFixed(2)+' GH/s':(+mhs||0).t
 function fmtDiff(d){d=+d||0;if(d>=1e12)return(d/1e12).toFixed(2)+'T';if(d>=1e9)return(d/1e9).toFixed(2)+'G';if(d>=1e6)return(d/1e6).toFixed(2)+'M';if(d>=1e3)return(d/1e3).toFixed(2)+'K';return d.toFixed(2);}
 async function refreshSwarm(){
   try{var r=await fetch('/api/swarm');var s=await r.json();var t=s.totals||{};var n=t.count||0;
-    el('swarm-count').textContent='· '+n+' miner'+(n===1?'':'s')+' on this network';
-    el('swarm-totals').innerHTML=tile('Total Hashrate',fmtHash(t.mhs||0),1)+tile('Miners',n)
+    el('hero-hash').textContent=fmtHash(t.mhs||0);
+    el('swarm-count').textContent=n?('· '+n+' miner'+(n===1?'':'s')):'';
+    el('swarm-totals').innerHTML=tile('Miners',n)
+      +tile('Est. Power','~'+(+t.est_watts||0).toFixed(1)+' W')
+      +tile('Efficiency','~'+(+t.mhs_per_w||0).toFixed(2)+' MH/s/W',1)
       +tile('Total Accepted',t.accepted||0,1)+tile('Total Rejected',t.rejected||0);
     var rows='<tr><th>Worker</th><th>IP</th><th>Hashrate</th><th>Best Diff</th><th>Acc</th><th>Rej</th><th>Temp</th><th>Uptime</th></tr>';
     (s.miners||[]).forEach(function(m){
