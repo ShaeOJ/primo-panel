@@ -528,13 +528,14 @@ async function refresh(){
     var svc=el('svc');svc.textContent=(s.service||'?')+(s.online?' · mining':'');svc.className='pill '+(s.online?'on':'off');
     var g=el('stats');
     if(!s.online){g.innerHTML=tile('Status','OFFLINE')+tile('Error',(s.error||'').slice(0,40));return;}
-    g.innerHTML=tile('Hashrate',(s.mhs>=1000?(s.mhs/1000).toFixed(2)+' GH/s':s.mhs.toFixed(2)+' MH/s'),1)
+    g.innerHTML=tile('Hashrate',fmtHash(s.mhs),1)
       +tile('Accepted',s.accepted,1)+tile('Rejected',s.rejected)+tile('Stale',s.stale)
       +tile('Best Share',(+s.best).toFixed(2))+tile('Pool Diff',(+s.diff).toFixed(4))
       +tile('Max Temp',(+s.max_temp).toFixed(0)+' &deg;C')+tile('Threads',s.threads)
       +tile('Est. Power','~'+(+s.est_watts||0).toFixed(1)+' W')
       +tile('Efficiency','~'+(+s.mhs_per_w||0).toFixed(2)+' MH/s/W',1)
-      +tile('Uptime',fmtUptime(s.uptime))+tile('Algo',s.algo);
+      +tile('Uptime',fmtUptime(s.uptime))+tile('Algo',s.algo)
+      +tile('Pool',(s.pool_url||'').replace(/^.*:\/\//,'')||'&mdash;');
   }catch(e){el('svc').textContent='panel error';}
 }
 async function loadCfg(){
@@ -566,7 +567,7 @@ async function post(u,b){
 }
 async function ctl(a){await post('/api/control',{action:a});}
 function toggleRaw(){var w=el('rawwrap');w.style.display=w.style.display==='none'?'block':'none';}
-function fmtHash(mhs){return mhs>=1000?(mhs/1000).toFixed(2)+' GH/s':(+mhs||0).toFixed(2)+' MH/s';}
+function fmtHash(mhs){var h=(+mhs||0)*1e6;return h>=1e9?(h/1e9).toFixed(2)+' GH/s':h>=1e6?(h/1e6).toFixed(2)+' MH/s':h>=1e3?(h/1e3).toFixed(2)+' kH/s':h.toFixed(0)+' H/s';}
 function fmtDiff(d){d=+d||0;if(d>=1e12)return(d/1e12).toFixed(2)+'T';if(d>=1e9)return(d/1e9).toFixed(2)+'G';if(d>=1e6)return(d/1e6).toFixed(2)+'M';if(d>=1e3)return(d/1e3).toFixed(2)+'K';return d.toFixed(2);}
 async function refreshSwarm(){
   try{var r=await fetch('/api/swarm');var s=await r.json();var t=s.totals||{};var n=t.count||0;
