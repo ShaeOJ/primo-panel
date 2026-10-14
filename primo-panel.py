@@ -533,7 +533,7 @@ async function refresh(){
       +tile('Best Share',(+s.best).toFixed(2))+tile('Pool Diff',(+s.diff).toFixed(4))
       +tile('Max Temp',(+s.max_temp).toFixed(0)+' &deg;C')+tile('Threads',s.threads)
       +tile('Est. Power','~'+(+s.est_watts||0).toFixed(1)+' W')
-      +tile('Efficiency','~'+(+s.mhs_per_w||0).toFixed(2)+' MH/s/W',1)
+      +tile('Efficiency','~'+fmtHash(+s.mhs_per_w||0)+'/W',1)
       +tile('Uptime',fmtUptime(s.uptime))+tile('Algo',s.algo)
       +tile('Pool',(s.pool_url||'').replace(/^.*:\/\//,'')||'&mdash;');
   }catch(e){el('svc').textContent='panel error';}
@@ -575,7 +575,7 @@ async function refreshSwarm(){
     el('swarm-count').textContent=n?('· '+n+' miner'+(n===1?'':'s')):'';
     el('swarm-totals').innerHTML=tile('Miners',n)
       +tile('Est. Power','~'+(+t.est_watts||0).toFixed(1)+' W')
-      +tile('Efficiency','~'+(+t.mhs_per_w||0).toFixed(2)+' MH/s/W',1)
+      +tile('Efficiency','~'+fmtHash(+t.mhs_per_w||0)+'/W',1)
       +tile('Total Accepted',t.accepted||0,1)+tile('Total Rejected',t.rejected||0);
     var rows='<tr><th>Worker</th><th>IP</th><th>Hashrate</th><th>Best Diff</th><th>Acc</th><th>Rej</th><th>Temp</th><th>Uptime</th></tr>';
     (s.miners||[]).forEach(function(m){
